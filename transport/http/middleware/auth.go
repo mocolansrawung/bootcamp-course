@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/evermos/boilerplate-go/configs"
 	"github.com/evermos/boilerplate-go/infras"
 	"github.com/evermos/boilerplate-go/shared"
 	"github.com/evermos/boilerplate-go/shared/failure"
@@ -13,7 +14,8 @@ import (
 )
 
 type Authentication struct {
-	db *infras.MySQLConn
+	db     *infras.MySQLConn
+	config *configs.Config
 }
 
 type ValidateAuthResponse struct {
@@ -24,9 +26,10 @@ const (
 	HeaderAuthorization = "Authorization"
 )
 
-func ProvideAuthentication(db *infras.MySQLConn) *Authentication {
+func ProvideAuthentication(db *infras.MySQLConn, config *configs.Config) *Authentication {
 	return &Authentication{
-		db: db,
+		db:     db,
+		config: config,
 	}
 }
 
@@ -36,14 +39,13 @@ func (a *Authentication) ValidateAuth(next http.Handler) http.Handler {
 
 		client := &http.Client{}
 
-		req, err := http.NewRequest("GET", "http://localhost:8080/v1/auth/validate", nil)
+		req, err := http.NewRequest("GET", a.config.App.AuthURL, nil)
 		if err != nil {
 			response.WithMessage(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 
 		req.Header.Add("Authorization", tokenStr)
-		req.Header.Add("Content-Type", "application/json")
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -63,7 +65,7 @@ func (a *Authentication) ValidateAuth(next http.Handler) http.Handler {
 	})
 }
 
-func (a *Authentication) RoleCheck(next http.Handler) http.Handler {
+func (a *Authentication) UserRoleCheck(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp, ok := r.Context().Value("responseBody").(shared.Claims)
 		if !ok {

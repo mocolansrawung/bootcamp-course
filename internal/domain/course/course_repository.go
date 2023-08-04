@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/evermos/boilerplate-go/infras"
 	"github.com/evermos/boilerplate-go/shared/failure"
@@ -62,7 +63,7 @@ var (
 
 type CourseRepository interface {
 	CreateCourse(course Course) (err error)
-	ResolveCourses(page int, limit int, sort string, order string) (courses []Course, err error)
+	ResolveCourses(params CourseQueryParameters) (courses []Course, err error)
 }
 
 type CourseRepositoryMySQL struct {
@@ -99,61 +100,50 @@ func (r *CourseRepositoryMySQL) CreateCourse(course Course) (err error) {
 	})
 }
 
-func (r *CourseRepositoryMySQL) ResolveCourses(page int, limit int, sort string, order string) (courses []Course, err error) {
+func (r *CourseRepositoryMySQL) ResolveCourses(params CourseQueryParameters) (courses []Course, err error) {
 	var args []interface{}
 
 	query := courseQueries.selectCourses
 
-	if sort != "" {
-		validColumns := map[string]bool{
-			"id":         true,
-			"user_id":    true,
-			"title":      true,
-			"content":    false,
-			"created_at": true,
-			"created_by": true,
-			"updated_at": true,
-			"updated_by": true,
-			"deleted_at": true,
-			"deleted_by": true,
+	if params.Role != "" {
+		query += " WHERE role = ?"
+		args = append(args, params.Role)
+	}
+
+	if params.Sort != "" {
+		isValid, err := r.isValidColumnName(params.Sort)
+		if err != nil {
+			return nil, err
 		}
-		if !validColumns[sort] {
+		if !isValid || !r.isSortableColumn(params.Sort) {
 			return nil, errors.New("Invalid sort parameter")
 		}
 
-		validOrders := map[string]bool{
-			"asc":  true,
-			"desc": true,
-		}
-		if !validOrders[order] {
-			return nil, errors.New("Invalid order parameter")
+		params.Order, err = r.validateAndCorrectOrder(params.Order)
+		if err != nil {
+			return nil, err
 		}
 
-		if order == "" {
-			order = "asc"
-		}
-
-		query += fmt.Sprintf(" ORDER BY %s %s", sort, order)
+		query += fmt.Sprintf(" ORDER BY %s %s", params.Sort, params.Order)
 	}
 
-	offset := page * limit
+	offset := params.Page * params.Limit
 	query += " LIMIT ? OFFSET ?"
-	args = append(args, limit, offset)
+	args = append(args, params.Limit, offset)
 
 	err = r.DB.Read.Select(&courses, query, args...)
-
 	if err != nil {
 		if err == sql.ErrNoRows {
 			err = failure.NotFound("courses")
 			logger.ErrorWithStack(err)
-			return
+			return nil, err
 		}
 
 		logger.ErrorWithStack(err)
-		return
+		return nil, err
 	}
 
-	return
+	return courses, nil
 }
 
 func (r *CourseRepositoryMySQL) ExistsByID(id uuid.UUID) (exists bool, err error) {
@@ -169,7 +159,7 @@ func (r *CourseRepositoryMySQL) ExistsByID(id uuid.UUID) (exists bool, err error
 	return
 }
 
-// internal functions
+// Internal Functions
 func (r *CourseRepositoryMySQL) txCreate(tx *sqlx.Tx, course Course) (err error) {
 	stmt, err := tx.PrepareNamed(courseQueries.insertCourse)
 	if err != nil {
@@ -184,4 +174,45 @@ func (r *CourseRepositoryMySQL) txCreate(tx *sqlx.Tx, course Course) (err error)
 	}
 
 	return
+}
+
+func (r *CourseRepositoryMySQL) isValidColumnName(columnName string) (bool, error) {
+	var columns []string
+	const query = `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'courses' AND TABLE_SCHEMA = DATABASE()`
+
+	if err := r.DB.Read.Select(&columns, query); err != nil {
+		return false, err
+	}
+
+	for _, column := range columns {
+		if column == columnName {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func (r *CourseRepositoryMySQL) isSortableColumn(columnName string) bool {
+	sortableColumns := map[string]bool{
+		"id":         true,
+		"user_id":    true,
+		"title":      true,
+		"created_at": true,
+		"created_by": true,
+		"updated_at": true,
+		"updated_by": true,
+		"deleted_at": true,
+		"deleted_by": true,
+	}
+
+	return sortableColumns[columnName]
+}
+
+func (r *CourseRepositoryMySQL) validateAndCorrectOrder(order string) (string, error) {
+	order = strings.ToLower(order)
+	if order != "asc" && order != "desc" {
+		return "", errors.New("Invalid order parameter")
+	}
+	return order, nil
 }

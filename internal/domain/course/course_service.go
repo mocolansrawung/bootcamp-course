@@ -8,7 +8,7 @@ import (
 
 type CourseService interface {
 	CreateCourse(requestFormat CourseRequestFormat, userID uuid.UUID) (course Course, err error)
-	ResolveCourses(page int, limit int, sort string, order string) (courses []Course, err error)
+	ResolveCourses(params CourseQueryParameters) (courses []Course, err error)
 }
 
 type CourseServiceImpl struct {
@@ -42,8 +42,8 @@ func (s *CourseServiceImpl) CreateCourse(requestFormat CourseRequestFormat, user
 	return
 }
 
-func (s *CourseServiceImpl) ResolveCourses(page int, limit int, sort string, order string) (courses []Course, err error) {
-	courses, err = s.CourseRepository.ResolveCourses(page, limit, sort, order)
+func (s *CourseServiceImpl) ResolveCourses(params CourseQueryParameters) (courses []Course, err error) {
+	courses, err = s.CourseRepository.ResolveCourses(params)
 	if err != nil {
 		return courses, failure.BadRequest(err)
 	}

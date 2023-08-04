@@ -23,6 +23,14 @@ type Course struct {
 	DeletedBy nuuid.NUUID `db:"deleted_by"`
 }
 
+type CourseQueryParameters struct {
+	Page  int
+	Limit int
+	Sort  string
+	Order string
+	Role  string
+}
+
 func (c Course) MarshalJSON() ([]byte, error) {
 	return json.Marshal(c.ToResponseFormat())
 }

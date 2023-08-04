@@ -30,11 +30,9 @@ func (h *CourseHandler) Router(r chi.Router) {
 	r.Route("/courses", func(r chi.Router) {
 		r.Group(func(r chi.Router) {
 			r.Use(h.AuthMiddleware.ValidateAuth)
+			r.Use(h.AuthMiddleware.UserRoleCheck)
 			r.Get("/", h.ResolveCourses)
-			r.Group(func(r chi.Router) {
-				r.Use(h.AuthMiddleware.RoleCheck)
-				r.Post("/", h.CreateCourse)
-			})
+			r.Post("/", h.CreateCourse)
 		})
 	})
 }
@@ -69,13 +67,13 @@ func (h *CourseHandler) CreateCourse(w http.ResponseWriter, r *http.Request) {
 
 func (h *CourseHandler) ResolveCourses(w http.ResponseWriter, r *http.Request) {
 	pageString := r.URL.Query().Get("page")
-	page, err := convertIdParamsToInt(pageString)
+	page, err := convertQueryParamsToInt(pageString)
 	if err != nil || page < 0 {
 		page = 0
 	}
 
 	limitString := r.URL.Query().Get("limit")
-	limit, err := convertIdParamsToInt(limitString)
+	limit, err := convertQueryParamsToInt(limitString)
 	if err != nil || limit <= 0 {
 		limit = 10
 	}
@@ -83,7 +81,20 @@ func (h *CourseHandler) ResolveCourses(w http.ResponseWriter, r *http.Request) {
 	sort := r.URL.Query().Get("sort")
 	order := r.URL.Query().Get("order")
 
-	courses, err := h.CourseService.ResolveCourses(page, limit, sort, order)
+	resp, ok := r.Context().Value("responseBody").(shared.Claims)
+	if !ok {
+		response.WithError(w, failure.InternalError(err))
+	}
+
+	params := course.CourseQueryParameters{
+		Page:  page,
+		Limit: limit,
+		Sort:  sort,
+		Order: order,
+		Role:  resp.Role,
+	}
+
+	courses, err := h.CourseService.ResolveCourses(params)
 	if err != nil {
 		response.WithError(w, err)
 		return
@@ -92,7 +103,7 @@ func (h *CourseHandler) ResolveCourses(w http.ResponseWriter, r *http.Request) {
 	response.WithJSON(w, http.StatusOK, courses)
 }
 
-func convertIdParamsToInt(idStr string) (int, error) {
+func convertQueryParamsToInt(idStr string) (int, error) {
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		return 0, fmt.Errorf("error converting ID parameter to integer: %w", err)
