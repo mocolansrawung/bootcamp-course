@@ -30,8 +30,11 @@ func (h *CourseHandler) Router(r chi.Router) {
 	r.Route("/courses", func(r chi.Router) {
 		r.Group(func(r chi.Router) {
 			r.Use(h.AuthMiddleware.ValidateAuth)
-			r.Post("/", h.CreateCourse)
 			r.Get("/", h.ResolveCourses)
+			r.Group(func(r chi.Router) {
+				r.Use(h.AuthMiddleware.RoleCheck)
+				r.Post("/", h.CreateCourse)
+			})
 		})
 	})
 }
@@ -61,7 +64,6 @@ func (h *CourseHandler) CreateCourse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Println(course)
 	response.WithJSON(w, http.StatusCreated, course)
 }
 
@@ -86,8 +88,6 @@ func (h *CourseHandler) ResolveCourses(w http.ResponseWriter, r *http.Request) {
 		response.WithError(w, err)
 		return
 	}
-
-	fmt.Println(courses)
 
 	response.WithJSON(w, http.StatusOK, courses)
 }

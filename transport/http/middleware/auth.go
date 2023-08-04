@@ -3,7 +3,6 @@ package middleware
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"github.com/evermos/boilerplate-go/infras"
@@ -59,9 +58,25 @@ func (a *Authentication) ValidateAuth(next http.Handler) http.Handler {
 			response.WithError(w, failure.BadRequest(err))
 		}
 
-		fmt.Println(responseBody.Data)
-
 		ctx := context.WithValue(r.Context(), "responseBody", responseBody.Data)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func (a *Authentication) RoleCheck(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp, ok := r.Context().Value("responseBody").(shared.Claims)
+		if !ok {
+			response.WithMessage(w, http.StatusInternalServerError, "Internal server error")
+			return
+		}
+
+		if resp.Role != "teacher" {
+			response.WithMessage(w, http.StatusUnauthorized, "User not authorized")
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), "responseBody", resp)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
