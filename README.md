@@ -36,5 +36,5 @@ Now, you can access the web application at http://localhost:8081 (or whichever p
 
 Major Improvements:
 1. destructure pagination query params intro struct
-2. add filter based on role logged in on resolve courses (student has zero 3. access to course list as the only one related to courses are teachers)
+2. add filter based on role logged in on resolve courses (student has zero access to course list as the only one related to courses are teachers)
 4. fixing hardcoded config into the use of config method
